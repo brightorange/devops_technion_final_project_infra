@@ -1,0 +1,77 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  labels:
+    {{- include "shop.labels" . | nindent 4 }}
+  annotations:
+    # post-install, not pre-install: on a first install nothing exists yet, so
+    # a pre-install hook would wait for a Postgres that Helm has not created.
+    # On upgrades Postgres is already running, so pre-upgrade runs the schema
+    # change before the new API pods roll out.
+    "helm.sh/hook": post-install,pre-upgrade
+    # Deletes the previous Job before creating this one, which is what makes a
+    # Job re-runnable at all: spec.template is immutable, so plain `apply` on a
+    # changed Job fails. Not hook-succeeded, so the logs survive for debugging.
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  # Safety net for real failures; the init container handles startup order.
+  backoffLimit: 3
+  # Give up if the whole Job (including waiting for Postgres) takes over
+  # 5 minutes. The init container's wait loop has no exit condition, so this
+  # is what turns a silent hang into a visible failure.
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        {{- include "shop.selectorLabels" (dict "ctx" . "component" "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "shop.podSecurityContext" . | nindent 8 }}
+      # Runs to completion before the main container starts.
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ .Values.postgres.image }}
+          command:
+            - sh
+            - -c
+            - until pg_isready -h "$DB_HOST" -p "$DB_PORT"; do echo "waiting for postgres"; sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: api-config
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            # The postgres image defaults to root; 70 is its built-in
+            # "postgres" user, needed because runAsNonRoot is set above.
+            runAsUser: 70
+            {{- include "shop.containerSecurityContext" . | nindent 12 }}
+      containers:
+        - name: migrate
+          image: {{ include "shop.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Same image as the API, different entrypoint: the schema and the
+          # code that uses it can never drift apart.
+          command: ["flask", "--app", "wsgi", "db", "upgrade"]
+          envFrom:
+            - configMapRef:
+                name: api-config
+          env:
+            {{- include "shop.dbCredentialEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            {{- include "shop.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

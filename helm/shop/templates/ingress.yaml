@@ -1,0 +1,33 @@
+{{- if .Values.ingress.enabled }}
+# Single entry point into the cluster. The Service stays ClusterIP: only the
+# ingress controller is reachable from outside, and it decides what to route.
+#
+# An Ingress is only data. It does nothing without an ingress controller
+# running in the cluster (minikube addons enable ingress).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+  labels:
+    {{- include "shop.labels" . | nindent 4 }}
+spec:
+  # Which controller should pick this up. Without it the Ingress is ignored
+  # whenever the cluster has no default class.
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # Only the listed prefixes are routed. /health/* is deliberately
+          # absent, so the probes stay private: the kubelet reaches them
+          # directly on the pod IP, which never passes through the ingress.
+          {{- range .Values.ingress.paths }}
+          - path: {{ . | quote }}
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  name: http
+          {{- end }}
+{{- end }}

@@ -1,0 +1,12 @@
+# Non-secret settings. Passwords come from the Secret named by
+# .Values.existingSecret, which is created outside the chart.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  labels:
+    {{- include "shop.labels" . | nindent 4 }}
+data:
+  DB_HOST: postgres
+  DB_PORT: {{ .Values.database.port | quote }}
+  DB_NAME: {{ .Values.database.name | quote }}

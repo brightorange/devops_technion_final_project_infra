@@ -1,0 +1,10 @@
+apiVersion: v2
+name: shop
+description: Shop API with its PostgreSQL database
+type: application
+
+# Version of the chart itself. Bump when the templates change.
+version: 0.1.0
+# Version of the application being deployed. Overridden per environment by
+# image.tag, which defaults to this value.
+appVersion: "0.1.0"
