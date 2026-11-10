@@ -1,0 +1,83 @@
+# One-shot Job: applies database migrations, then exits.
+# A Job's pod template can't be changed, so to re-run it:
+#   kubectl -n shop delete job db-migrate && kubectl apply -f k8s/30-migrate-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: shop
+spec:
+  # Safety net for real failures; the init container handles startup order.
+  backoffLimit: 3
+  # Give up if the whole Job (including waiting for Postgres) takes over 5 minutes.
+  activeDeadlineSeconds: 300
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      # Runs to completion before the main container starts.
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16.15-alpine
+          command:
+            - sh
+            - -c
+            - until pg_isready -h "$DB_HOST" -p "$DB_PORT"; do echo "waiting for postgres"; sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: api-config
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            # The postgres image defaults to root; 70 is its built-in "postgres" user.
+            runAsUser: 70
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: migrate
+          image: shop-api:dev
+          imagePullPolicy: IfNotPresent
+          command: ["flask", "--app", "wsgi", "db", "upgrade"]
+          envFrom:
+            - configMapRef:
+                name: api-config
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: DB_PASSWORD
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
