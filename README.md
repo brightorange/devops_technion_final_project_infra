@@ -45,9 +45,12 @@ echo "127.0.0.1 shop.local" | sudo tee -a /etc/hosts
 # tunnel is what publishes the ingress controller on 127.0.0.1.
 minikube tunnel
 
-curl http://shop.local/health/ready
 curl http://shop.local/api/products
 ```
+
+Only `/api` is routed. `/health/*` returns 404 through the ingress on purpose —
+the probes are for the kubelet, which reaches them directly on the pod IP. To
+check health by hand, go to the Service or the pod instead.
 
 Without the hosts entry, the same thing with the header set by hand:
 

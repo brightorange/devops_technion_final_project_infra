@@ -18,7 +18,10 @@ spec:
     - host: shop.local
       http:
         paths:
-          - path: /
+          # Only /api is routed. /health/* is deliberately absent, so the
+          # probes stay private: the kubelet reaches them directly on the pod
+          # IP, which never passes through the ingress.
+          - path: /api
             pathType: Prefix
             backend:
               service:
