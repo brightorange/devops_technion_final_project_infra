@@ -1,0 +1,11 @@
+# Non-secret settings. Passwords go in the postgres-credentials Secret,
+# which is created with kubectl and never committed (see README).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: shop
+data:
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: shop
