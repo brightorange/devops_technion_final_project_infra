@@ -1,0 +1,15 @@
+# IDE / OS
+.idea/
+.DS_Store
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!*.tfvars.example
+
+# Credentials
+.env
+*kubeconfig*
