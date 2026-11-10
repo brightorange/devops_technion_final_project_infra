@@ -3,8 +3,9 @@
 Infrastructure and deployment for the shop API
 ([app repo](https://github.com/brightorange/devops_technion_final_project)).
 
-`helm/shop` is the deployment. `k8s/` holds the equivalent plain manifests the
-chart was derived from, kept as a reference — deploy one or the other, not both.
+`helm/shop` is the deployment. It was derived from plain manifests, which are
+in the history up to [PR #1](https://github.com/brightorange/devops_technion_final_project_infra/pull/1)
+if you want the before/after.
 
 Every command names its cluster explicitly (`--kube-context` / `--context`), so
 it can never hit whatever cluster happens to be the current context.
@@ -58,25 +59,6 @@ Changing a value in the ConfigMap triggers a rollout on its own: the API pod
 template carries a `checksum/config` annotation over the rendered ConfigMap.
 Without it, environment variables are read once at container start and config
 edits are silently ignored.
-
-## Deploy to Minikube (plain manifests)
-
-The original, pre-Helm path. Note `k8s/` includes its own namespace manifest.
-
-```bash
-kubectl --context minikube apply -f k8s/00-namespace.yaml
-kubectl --context minikube -n shop create secret generic postgres-credentials \
-  --from-literal=DB_USER=shop \
-  --from-literal=DB_PASSWORD="$(openssl rand -base64 18)"
-kubectl --context minikube apply -f k8s/
-```
-
-Migrations here are manual, because a completed Job cannot be re-applied:
-
-```bash
-kubectl --context minikube -n shop delete job db-migrate
-kubectl --context minikube apply -f k8s/30-migrate-job.yaml
-```
 
 ## Reach the API
 
