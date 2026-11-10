@@ -1,0 +1,30 @@
+# Single entry point into the cluster. The Service stays ClusterIP: only the
+# ingress controller is reachable from outside, and it decides what to route.
+#
+# An Ingress is only data. It does nothing without an ingress controller
+# running in the cluster (minikube addons enable ingress).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+  namespace: shop
+  labels:
+    app: api
+spec:
+  # Which controller should pick this up. Without it the Ingress is ignored
+  # whenever the cluster has no default class.
+  ingressClassName: nginx
+  rules:
+    - host: shop.local
+      http:
+        paths:
+          # Only /api is routed. /health/* is deliberately absent, so the
+          # probes stay private: the kubelet reaches them directly on the pod
+          # IP, which never passes through the ingress.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  name: http

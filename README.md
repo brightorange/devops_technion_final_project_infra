@@ -11,6 +11,10 @@ never hit whatever cluster happens to be the current context.
 ```bash
 minikube start --driver=docker --cpus=4 --memory=8g
 
+# 0. Ingress controller. An Ingress resource is only data; without a
+#    controller running, nothing routes.
+minikube addons enable ingress
+
 # 1. Build the image in the app repo and load it into Minikube
 docker compose -f ../devops_technion_final_project/docker-compose.yml build
 minikube image load shop-api:dev
@@ -24,8 +28,44 @@ kubectl --context minikube -n shop create secret generic postgres-credentials \
 # 3. Everything else
 kubectl --context minikube apply -f k8s/
 
-# 4. Check and reach the API
+# 4. Check
 kubectl --context minikube -n shop get pods
+```
+
+## Reach the API
+
+Through the Ingress, at `http://shop.local`:
+
+```bash
+# One time: point the hostname at localhost
+echo "127.0.0.1 shop.local" | sudo tee -a /etc/hosts
+
+# Leave running in its own terminal. With the docker driver the node IP
+# (minikube ip) is inside Docker's VM and unreachable from macOS, so the
+# tunnel is what publishes the ingress controller on 127.0.0.1.
+minikube tunnel
+
+curl http://shop.local/api/products
+```
+
+Only `/api` is routed. `/health/*` returns 404 through the ingress on purpose —
+the probes are for the kubelet, which reaches them directly on the pod IP. To
+check health by hand, go to the Service or the pod instead.
+
+Without the hosts entry, the same thing with the header set by hand:
+
+```bash
+kubectl --context minikube -n ingress-nginx \
+  port-forward svc/ingress-nginx-controller 8080:80
+curl -H "Host: shop.local" http://localhost:8080/api/products
+```
+
+Bypassing the Ingress entirely, straight to the Service:
+
+```bash
 kubectl --context minikube -n shop port-forward svc/api 8080:80
 curl localhost:8080/health/ready
 ```
+
+Note that `port-forward` on a Service tunnels to a single pod, so it does not
+exercise load balancing. To see that, call the Service from inside the cluster.
