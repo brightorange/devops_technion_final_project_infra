@@ -1,0 +1,53 @@
+# Defaults target Minikube. Override per environment with -f values-gke.yaml.
+
+image:
+  repository: shop-api
+  # Defaults to .Chart.appVersion when empty. CI should set this to the git SHA
+  # so every build gets a unique tag and Kubernetes actually pulls the new one.
+  tag: "dev"
+  # Minikube has no registry: the image is side-loaded with `minikube image load`.
+  pullPolicy: IfNotPresent
+
+api:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+postgres:
+  image: postgres:16.15-alpine
+  storage: 1Gi
+  # Leave empty to use the cluster's default StorageClass.
+  storageClass: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Non-secret connection settings; rendered into a ConfigMap.
+database:
+  name: shop
+  port: 5432
+
+# Credentials live in a Secret created outside the chart, so the password is
+# never stored in git:
+#   kubectl -n shop create secret generic postgres-credentials \
+#     --from-literal=DB_USER=shop \
+#     --from-literal=DB_PASSWORD="$(openssl rand -base64 18)"
+existingSecret: postgres-credentials
+
+ingress:
+  enabled: true
+  className: nginx
+  host: shop.local
+  # Only these prefixes are routed. /health/* is deliberately excluded so the
+  # probes stay private to the kubelet.
+  paths:
+    - /api

@@ -1,6 +1,0 @@
-# A namespace groups everything that belongs to the shop app, so it can be
-# listed, limited and deleted together (kubectl delete namespace shop).
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: shop

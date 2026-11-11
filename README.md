@@ -3,10 +3,14 @@
 Infrastructure and deployment for the shop API
 ([app repo](https://github.com/brightorange/devops_technion_final_project)).
 
-## Deploy to Minikube (plain manifests)
+`helm/shop` is the deployment. It was derived from plain manifests, which are
+in the history up to [PR #1](https://github.com/brightorange/devops_technion_final_project_infra/pull/1)
+if you want the before/after.
 
-Every `kubectl` command names its cluster with `--context minikube`, so it can
-never hit whatever cluster happens to be the current context.
+Every command names its cluster explicitly (`--kube-context` / `--context`), so
+it can never hit whatever cluster happens to be the current context.
+
+## Deploy to Minikube (Helm)
 
 ```bash
 minikube start --driver=docker --cpus=4 --memory=8g
@@ -19,18 +23,42 @@ minikube addons enable ingress
 docker compose -f ../devops_technion_final_project/docker-compose.yml build
 minikube image load shop-api:dev
 
-# 2. Namespace, then the DB secret (never committed)
-kubectl --context minikube apply -f k8s/00-namespace.yaml
+# 2. Namespace, then the DB secret. The secret is created out of band so the
+#    password is never stored in git; the chart only references it by name.
+kubectl --context minikube create namespace shop
 kubectl --context minikube -n shop create secret generic postgres-credentials \
   --from-literal=DB_USER=shop \
   --from-literal=DB_PASSWORD="$(openssl rand -base64 18)"
 
-# 3. Everything else
-kubectl --context minikube apply -f k8s/
-
-# 4. Check
-kubectl --context minikube -n shop get pods
+# 3. Install
+helm install shop helm/shop -n shop --kube-context minikube --wait
 ```
+
+Day-to-day:
+
+```bash
+helm upgrade shop helm/shop -n shop --kube-context minikube --wait
+helm upgrade shop helm/shop -n shop --kube-context minikube --set api.replicas=3
+helm history shop -n shop --kube-context minikube
+helm rollback shop 1 -n shop --kube-context minikube
+helm template shop helm/shop            # render locally, change nothing
+helm diff upgrade shop helm/shop        # needs the helm-diff plugin
+```
+
+The migration runs itself. `db-migrate` is a `post-install,pre-upgrade` hook, so
+every upgrade applies the schema before the new API pods roll out. Its
+`before-hook-creation` delete policy recreates the Job each time, which is what
+makes it re-runnable at all — a Job's `spec.template` is immutable, so plain
+`kubectl apply` on a changed Job fails.
+
+It is `post-install` rather than `pre-install` because on a first install
+nothing exists yet, and a pre-install hook would sit waiting for a Postgres that
+Helm has not created.
+
+Changing a value in the ConfigMap triggers a rollout on its own: the API pod
+template carries a `checksum/config` annotation over the rendered ConfigMap.
+Without it, environment variables are read once at container start and config
+edits are silently ignored.
 
 ## Reach the API
 
